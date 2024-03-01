@@ -1,0 +1,5 @@
+PyGetWindow==0.0.9
+pynput==1.7.6
+PyRect==0.2.0
+python-xlib==0.33
+six==1.16.0
