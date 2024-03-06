@@ -1,2 +1,5 @@
 tracking_activity/
 *.pyc
+/build
+/dist
+*.spec
