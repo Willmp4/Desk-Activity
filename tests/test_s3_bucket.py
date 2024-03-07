@@ -24,7 +24,7 @@ def test_upload_data_to_s3(s3):
     data = [{"event": "test_event", "timestamp": "2024-03-07T12:00:00"}]
 
     # Create the mocked bucket
-    s3.create_bucket(Bucket=bucket_name)
+    s3.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'LocationConstraint': 'eu-west-2'})
     
     # Now call your function to upload data to S3
     upload_data_to_s3(data, user_id)
