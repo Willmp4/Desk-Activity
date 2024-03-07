@@ -7,6 +7,8 @@ import getpass
 import pygetwindow as gw
 import requests
 import sys
+import json
+import boto3
 
 user_id = getpass.getuser()
 event_buffer = []
@@ -89,16 +91,17 @@ def on_move(x, y):
 def submit(focus_level):
     log_event('focus_level', {'level': focus_level})
 
-def send_data_to_server(data):
-    url = "http://localhost:5000/upload_events"
-    try:
-        response = requests.post(url, json=data)
-        if response.status_code == 200:
-            print("Events uploaded successfully")
-        else:
-            print(f"Failed to upload events: {response.status_code}")
-    except Exception as e:
-        print(f"Failed to upload events: {e}")
+def send_data_to_lambda(data, lambda_client=None):
+    if lambda_client is None:
+        lambda_client = boto3.client('lambda', region_name='eu-west-2')
+    # rest of the code remains the same
+
+    response = lambda_client.invoke(
+        FunctionName='upload_s3_bucket',  # Replace with your Lambda function's name
+        InvocationType='RequestResponse',
+        Payload=json.dumps(data),
+    )
+    return response
 
 def write_events_to_buffer_and_upload():
     global event_buffer
@@ -108,7 +111,7 @@ def write_events_to_buffer_and_upload():
             "user_id": user_id,
             "events": event_buffer
         }
-        send_data_to_server(data)
+        send_data_to_lambda(data)
         event_buffer.clear()
 
 def ask_focus_level():
