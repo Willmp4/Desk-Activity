@@ -51,8 +51,9 @@ def upload_data_to_s3(data, user_id):
 @app.route('/upload_events', methods=['POST'])
 def upload_events():
     data = request.json
-
-    print("events uploaded to s3")
+    user_id = data['user_id']
+    events = data['events']
+    upload_data_to_s3(events, user_id)
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
