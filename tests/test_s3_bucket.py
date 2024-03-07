@@ -20,7 +20,7 @@ def s3(aws_credentials):
 
 def test_upload_data_to_s3(s3):
     bucket_name = 'desk-top-activity'
-    user_id = 'test_user'
+    user_id = 'will'
     data = [{"event": "test_event", "timestamp": "2024-03-07T12:00:00"}]
 
     # Create the mocked bucket
