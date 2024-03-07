@@ -42,5 +42,5 @@ class TestLambdaDataUpload(unittest.TestCase):
 #         self.assertEqual(data_sent['events'], [{'event': 'test_event'}])
 #         self.assertEqual(len(mouse_keyboard_activity.event_buffer), 0)  # Check if the buffer is cleared
 
-# if __name__ == '__main__':
-#     unittest.main()
+if __name__ == '__main__':
+    unittest.main()
