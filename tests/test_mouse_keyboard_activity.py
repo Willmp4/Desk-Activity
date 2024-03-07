@@ -1,5 +1,9 @@
 import pytest
 from unittest.mock import patch
+
+#add parent directory to path
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mouse_keyboard_activity import send_data_to_server
 
 @pytest.mark.parametrize("status_code, expected_call_count", [
