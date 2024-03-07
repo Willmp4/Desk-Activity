@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import getpass
 import pygetwindow as gw
 import requests
-import io
 import sys
 
 user_id = getpass.getuser()
