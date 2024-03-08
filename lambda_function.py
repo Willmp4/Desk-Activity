@@ -3,7 +3,7 @@ import boto3
 from datetime import datetime
 
 s3_client = boto3.client('s3')
-bucket_name = 'desk-top-activity'  # replace with your bucket name
+bucket_name = 'desk-top-activity'
 
 def file_exists_in_s3(bucket, key):
     """Check if the file exists in S3 bucket."""
@@ -45,16 +45,11 @@ def upload_data_to_s3(data, user_id):
             print(f"Failed to upload data to S3: {e}")
 
 def lambda_handler(event, context):
-    user_id = event['user_id']
-    events = event['events']
-    now = datetime.now()
-    file_name = f"{user_id}/{now.strftime('%Y-%m-%d')}/activity_log.json"
-
+    body = json.loads(event['body'])
+    user_id = body['user_id']
+    data = body['events']
+    upload_data_to_s3(data, user_id)
     try:
-        # Convert the event data to a JSON string
-        data_string = json.dumps(events, indent=2)
-        # Upload the data to S3
-        s3_client.put_object(Bucket=bucket_name, Key=file_name, Body=data_string)
         return {
             'statusCode': 200,
             'body': json.dumps('Data uploaded successfully to S3')
@@ -62,5 +57,5 @@ def lambda_handler(event, context):
     except Exception as e:
         return {
             'statusCode': 500,
-            'body': json.dumps(f'Error uploading data: {str(e)}')
+            'body': json.dumps(f'Failed to upload data: {e}')
         }
