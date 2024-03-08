@@ -6,9 +6,7 @@ from datetime import datetime, timedelta
 import getpass
 import pygetwindow as gw
 import requests
-import sys
-import json
-import boto3
+
 
 user_id = getpass.getuser()
 event_buffer = []
@@ -91,16 +89,13 @@ def on_move(x, y):
 def submit(focus_level):
     log_event('focus_level', {'level': focus_level})
 
-def send_data_to_lambda(data, lambda_client=None):
-    if lambda_client is None:
-        lambda_client = boto3.client('lambda', region_name='eu-west-2')
-    # rest of the code remains the same
-
-    response = lambda_client.invoke(
-        FunctionName='upload_s3_bucket',  # Replace with your Lambda function's name
-        InvocationType='RequestResponse',
-        Payload=json.dumps(data),
-    )
+def send_data_to_lambda(data):
+    api_gateway_url = 'https://ygmxyfodkg.execute-api.eu-west-2.amazonaws.com/prod/events'
+    headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': 'API_KEY_PLACEHOLDER'
+    }
+    response = requests.post(api_gateway_url, headers=headers, json=data)
     return response
 
 def write_events_to_buffer_and_upload():
@@ -108,10 +103,10 @@ def write_events_to_buffer_and_upload():
     if event_buffer:
         print(f"Uploading {len(event_buffer)} events to S3")
         data = {
-            "user_id": user_id,
-            "events": event_buffer
+            'user_id': user_id,
+            'events': event_buffer
         }
-        send_data_to_lambda(data)
+        r = send_data_to_lambda(data)
         event_buffer.clear()
 
 def ask_focus_level():
@@ -146,20 +141,19 @@ def start_monitoring():
     mouse_listener = mouse.Listener(on_click=on_click, on_move=on_move)
     keyboard_listener.start()
     mouse_listener.start()
-    focus_thread = Thread(target=ask_focus_level)
+    focus_thread = Thread(target=ask_focus_level, daemon=True)
     focus_thread.start()
-    window_thread = Thread(target=log_active_window_periodically)
+    window_thread = Thread(target=log_active_window_periodically, daemon=True)
     window_thread.start()
-    mouse_movement_thread = Thread(target=log_mouse_movement_periodically)
+    mouse_movement_thread = Thread(target=log_mouse_movement_periodically, daemon=True)
     mouse_movement_thread.start()
-    keyboard_activity_thread = Thread(target=log_keyboard_activity)  # Log keyboard activity
+    keyboard_activity_thread = Thread(target=log_keyboard_activity, daemon=True)  # Log keyboard activity
     keyboard_activity_thread.start()
 
 def stop_monitoring():
     global monitoring_active
     monitoring_active.clear()  # Signal all threads to stop
-    sys.exit()  # Terminate the program
-    
+
 def main_gui():
     root = tk.Tk()
     root.title("Activity Monitor")
@@ -170,6 +164,11 @@ def main_gui():
     stop_button.pack()
     
     root.mainloop()
+
+    def on_close():
+        stop_monitoring()
+        root.destroy()
+    # root.protocol("WM_DELETE_WINDOW", on_close)
 
 def main():
     main_gui()
