@@ -12,20 +12,40 @@ user_id = getpass.getuser()
 event_buffer = []
 keyboard_activity_buffer = []
 last_keyboard_activity_time = None
-KEYBOARD_SESSION_TIMEOUT = timedelta(seconds=2)
+KEYBOARD_SESSION_TIMEOUT = timedelta(seconds=3)
 focus_level_submitted = False
 monitoring_active = Event()
 mouse_position_buffer = []
 monitoring_active.set()
+last_event_time = None
+current_focus_level = None
 
 def log_event(event_type, data):
-    global event_buffer
+    global event_buffer, last_event_time
+    current_time = datetime.now()
+    timestamp = current_time.isoformat()
+    
+    # Initialize the time delta as None for the first event
+    time_delta = None
+    
+    # Calculate time delta if this is not the first event
+    if last_event_time is not None:
+        time_delta = (current_time - last_event_time).total_seconds()
+    
+    # Create the event dictionary, including the time delta if available
     event = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": timestamp,
         "type": event_type,
         "data": data
     }
+    if time_delta is not None:
+        event['time_delta'] = time_delta
+    
+    # Append the event to the event buffer
     event_buffer.append(event)
+    
+    # Update the last_event_time to the current event's timestamp
+    last_event_time = current_time
 
 def get_active_window_title():
     window = gw.getActiveWindow()
@@ -109,20 +129,25 @@ def write_events_to_buffer_and_upload():
         r = send_data_to_lambda(data)
         event_buffer.clear()
 
+
+def submit(focus_level):
+    global current_focus_level  # Correctly declare the global variable
+    current_focus_level = focus_level  # Update the global focus level
+    log_event('focus_level', {'level': focus_level})
+
 def ask_focus_level():
-    global focus_level_submitted
+    global focus_level_submitted, current_focus_level
     while True:
-        time.sleep(15)
+        time.sleep(60*30)
         focus_level_submitted = False
         root = tk.Tk()
         root.attributes('-topmost', True)
         root.focus_force()
         root.title("Focus Level")
 
-        def submit():
-            global focus_level_submitted
-            focus_level = scale.get()
-            log_event('focus_level', {'level': focus_level})
+        def on_submit():
+            focus_level = scale.get()  # Get the value from the scale widget
+            submit(focus_level)  # Call the outer submit function with the focus level
             focus_level_submitted = True
             root.destroy()
             write_events_to_buffer_and_upload()
@@ -130,12 +155,13 @@ def ask_focus_level():
         tk.Label(root, text="Rate your focus level:").pack()
         scale = tk.Scale(root, from_=0, to=10, orient='horizontal')
         scale.pack()
-        tk.Button(root, text="Submit", command=submit).pack()
+        tk.Button(root, text="Submit", command=on_submit).pack()  # Use the local on_submit function
 
         root.mainloop()
 
 def start_monitoring():
-    global monitoring_active
+    global monitoring_active, last_event_time
+    last_event_time = None
     monitoring_active.set()
     keyboard_listener = keyboard.Listener(on_press=on_press)
     mouse_listener = mouse.Listener(on_click=on_click, on_move=on_move)
@@ -151,7 +177,8 @@ def start_monitoring():
     keyboard_activity_thread.start()
 
 def stop_monitoring():
-    global monitoring_active
+    global monitoring_active, last_event_time
+    last_event_time = None
     monitoring_active.clear()  # Signal all threads to stop
 
 def main_gui():
@@ -168,7 +195,6 @@ def main_gui():
     def on_close():
         stop_monitoring()
         root.destroy()
-    # root.protocol("WM_DELETE_WINDOW", on_close)
 
 def main():
     main_gui()
