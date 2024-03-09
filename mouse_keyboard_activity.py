@@ -3,34 +3,49 @@ from pynput import keyboard, mouse
 from threading import Thread, Event
 import tkinter as tk
 from datetime import datetime, timedelta
-import json
-import boto3
 import getpass
 import pygetwindow as gw
-import io
-import sys
+import requests
+
 
 user_id = getpass.getuser()
-s3_client = boto3.client('s3')
-bucket_name = 'desk-top-activity'
-
 event_buffer = []
 keyboard_activity_buffer = []
 last_keyboard_activity_time = None
-KEYBOARD_SESSION_TIMEOUT = timedelta(seconds=2)
+KEYBOARD_SESSION_TIMEOUT = timedelta(seconds=3)
 focus_level_submitted = False
 monitoring_active = Event()
 mouse_position_buffer = []
 monitoring_active.set()
+last_event_time = None
+current_focus_level = None
 
 def log_event(event_type, data):
-    global event_buffer
+    global event_buffer, last_event_time
+    current_time = datetime.now()
+    timestamp = current_time.isoformat()
+    
+    # Initialize the time delta as None for the first event
+    time_delta = None
+    
+    # Calculate time delta if this is not the first event
+    if last_event_time is not None:
+        time_delta = (current_time - last_event_time).total_seconds()
+    
+    # Create the event dictionary, including the time delta if available
     event = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": timestamp,
         "type": event_type,
         "data": data
     }
+    if time_delta is not None:
+        event['time_delta'] = time_delta
+    
+    # Append the event to the event buffer
     event_buffer.append(event)
+    
+    # Update the last_event_time to the current event's timestamp
+    last_event_time = current_time
 
 def get_active_window_title():
     window = gw.getActiveWindow()
@@ -94,67 +109,45 @@ def on_move(x, y):
 def submit(focus_level):
     log_event('focus_level', {'level': focus_level})
 
-def file_exists_in_s3(bucket, key):
-    """Check if the file exists in S3 bucket."""
-    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=key)
-    for obj in response.get('Contents', []):
-        if obj['Key'] == key:
-            return True
-    return False
-
-def append_data_to_s3(bucket, key, new_data):
-    """Append new data to an existing S3 file."""
-    # Download the existing data
-    existing_data_obj = s3_client.get_object(Bucket=bucket, Key=key)
-    existing_data = json.load(existing_data_obj['Body'])
-    
-    # Append new data
-    existing_data.extend(new_data)
-    
-    # Upload the updated data
-    s3_client.put_object(Bucket=bucket, Key=key, Body=json.dumps(existing_data, indent=2))
-    print(f"Data appended successfully to {bucket}/{key}")
-
-def upload_data_to_s3(data, user_id):
-    now = datetime.now()
-    date_str = now.strftime("%Y-%m-%d")
-    key_prefix = f"{user_id}/{date_str}"
-    key = f"{key_prefix}/activity_log.json"
-    
-    # Check if a file for the current day already exists
-    if file_exists_in_s3(bucket_name, key):
-        # If exists, append data to the existing file
-        append_data_to_s3(bucket_name, key, data)
-    else:
-        # If not, create a new file for the current day
-        try:
-            s3_client.put_object(Bucket=bucket_name, Key=key, Body=json.dumps(data, indent=2))
-            print(f"Data uploaded successfully to {bucket_name}/{key}")
-        except Exception as e:
-            print(f"Failed to upload data to S3: {e}")
-
+def send_data_to_lambda(data):
+    api_gateway_url = 'https://ygmxyfodkg.execute-api.eu-west-2.amazonaws.com/prod/events'
+    headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': 'API_KEY_PLACEHOLDER'
+    }
+    response = requests.post(api_gateway_url, headers=headers, json=data)
+    return response
 
 def write_events_to_buffer_and_upload():
     global event_buffer
     if event_buffer:
         print(f"Uploading {len(event_buffer)} events to S3")
-        upload_data_to_s3(event_buffer, user_id)
+        data = {
+            'user_id': user_id,
+            'events': event_buffer
+        }
+        r = send_data_to_lambda(data)
         event_buffer.clear()
 
+
+def submit(focus_level):
+    global current_focus_level  # Correctly declare the global variable
+    current_focus_level = focus_level  # Update the global focus level
+    log_event('focus_level', {'level': focus_level})
+
 def ask_focus_level():
-    global focus_level_submitted
+    global focus_level_submitted, current_focus_level
     while True:
-        time.sleep(15)
+        time.sleep(60*30)
         focus_level_submitted = False
         root = tk.Tk()
         root.attributes('-topmost', True)
         root.focus_force()
         root.title("Focus Level")
 
-        def submit():
-            global focus_level_submitted
-            focus_level = scale.get()
-            log_event('focus_level', {'level': focus_level})
+        def on_submit():
+            focus_level = scale.get()  # Get the value from the scale widget
+            submit(focus_level)  # Call the outer submit function with the focus level
             focus_level_submitted = True
             root.destroy()
             write_events_to_buffer_and_upload()
@@ -162,31 +155,32 @@ def ask_focus_level():
         tk.Label(root, text="Rate your focus level:").pack()
         scale = tk.Scale(root, from_=0, to=10, orient='horizontal')
         scale.pack()
-        tk.Button(root, text="Submit", command=submit).pack()
+        tk.Button(root, text="Submit", command=on_submit).pack()  # Use the local on_submit function
 
         root.mainloop()
 
 def start_monitoring():
-    global monitoring_active
+    global monitoring_active, last_event_time
+    last_event_time = None
     monitoring_active.set()
     keyboard_listener = keyboard.Listener(on_press=on_press)
     mouse_listener = mouse.Listener(on_click=on_click, on_move=on_move)
     keyboard_listener.start()
     mouse_listener.start()
-    focus_thread = Thread(target=ask_focus_level)
+    focus_thread = Thread(target=ask_focus_level, daemon=True)
     focus_thread.start()
-    window_thread = Thread(target=log_active_window_periodically)
+    window_thread = Thread(target=log_active_window_periodically, daemon=True)
     window_thread.start()
-    mouse_movement_thread = Thread(target=log_mouse_movement_periodically)
+    mouse_movement_thread = Thread(target=log_mouse_movement_periodically, daemon=True)
     mouse_movement_thread.start()
-    keyboard_activity_thread = Thread(target=log_keyboard_activity)  # Log keyboard activity
+    keyboard_activity_thread = Thread(target=log_keyboard_activity, daemon=True)  # Log keyboard activity
     keyboard_activity_thread.start()
 
 def stop_monitoring():
-    global monitoring_active
+    global monitoring_active, last_event_time
+    last_event_time = None
     monitoring_active.clear()  # Signal all threads to stop
-    sys.exit()  # Terminate the program
-    
+
 def main_gui():
     root = tk.Tk()
     root.title("Activity Monitor")
@@ -197,6 +191,10 @@ def main_gui():
     stop_button.pack()
     
     root.mainloop()
+
+    def on_close():
+        stop_monitoring()
+        root.destroy()
 
 def main():
     main_gui()

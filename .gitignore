@@ -1,6 +1,8 @@
 tracking_activity/
 *.pyc
 desk_activity/
-dist/
 build/
-mouse_keyboard_activity.spec
+dist/
+*.spec
+tests/__pycache__/test_send_to_lambda.cpython-311-pytest-8.0.2.pyc.7032
+build.bat
