@@ -2,6 +2,10 @@ import boto3
 from moto import mock_aws
 import pytest
 import json
+from datetime import datetime
+#append to parent directory
+import sys
+sys.path.append('..')
 from lambda_function import upload_data_to_s3
 
 @pytest.fixture
@@ -30,7 +34,10 @@ def test_upload_data_to_s3(s3):
     upload_data_to_s3(data, user_id)
     
     # Assert the file was created and contains the correct data
-    response = s3.get_object(Bucket=bucket_name, Key=f"{user_id}/2024-03-07/activity_log.json")
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    key = f"{user_id}/{date_str}/activity_log.json"
+    response = s3.get_object(Bucket=bucket_name, Key=key)
     response_data = response['Body'].read().decode("utf-8")
     
     assert data == json.loads(response_data)
