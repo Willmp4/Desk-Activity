@@ -5,7 +5,7 @@ def main():
     api_url = 'https://ygmxyfodkg.execute-api.eu-west-2.amazonaws.com/prod/events'
     api_key = 'API_KEY_PLACEHOLDER'
     data_uploader = DataUploader(api_url, api_key)
-    activity_monitor = ActivityMonitor(data_uploader=data_uploader)  # Assuming you adjust ActivityMonitor's __init__ to accept a DataUploader instance
+    activity_monitor = ActivityMonitor(data_uploader=data_uploader)
     gui = ActivityMonitorGUI(activity_monitor=activity_monitor)
     gui.run()
 
