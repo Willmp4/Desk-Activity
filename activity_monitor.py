@@ -4,7 +4,7 @@ import getpass
 import tkinter as tk
 from pynput import keyboard, mouse
 from threading import Thread, Event
-# import pygetwindow as gw
+import pygetwindow as gw
 import queue
 
 class ActivityMonitor:
@@ -53,21 +53,21 @@ class ActivityMonitor:
             except queue.Empty:
                 continue
 
-    # def get_active_window_title(self):
-    #     window = gw.getActiveWindow()
-    #     if window:
-    #         return window.title
-    #     else:
-    #         return None
+    def get_active_window_title(self):
+        window = gw.getActiveWindow()
+        if window:
+            return window.title
+        else:
+            return None
 
-    # def log_active_window_periodically(self):
-    #     last_active_window_title = None
-    #     while self.monitoring_active.is_set():
-    #         active_window_title = self.get_active_window_title()
-    #         if active_window_title and active_window_title != last_active_window_title:
-    #             self.log_event("active_window", {"title": active_window_title})
-    #             last_active_window_title = active_window_title
-    #         time.sleep(1)
+    def log_active_window_periodically(self):
+        last_active_window_title = None
+        while self.monitoring_active.is_set():
+            active_window_title = self.get_active_window_title()
+            if active_window_title and active_window_title != last_active_window_title:
+                self.log_event("active_window", {"title": active_window_title})
+                last_active_window_title = active_window_title
+            time.sleep(2)
 
     def log_mouse_movement_periodically(self):
         while self.monitoring_active.is_set():
@@ -77,7 +77,7 @@ class ActivityMonitor:
                 if start_position != end_position:
                     self.log_event('mouse_movement', {'start_position': start_position, 'end_position': end_position})
                 self.mouse_position_buffer.clear()
-            time.sleep(1)
+            time.sleep(0.2)
 
     def log_keyboard_activity(self):
         while self.monitoring_active.is_set():
@@ -87,7 +87,7 @@ class ActivityMonitor:
                     end_time = self.keyboard_activity_buffer[-1]["timestamp"]
                     self.log_event("keyboard_activity_session", {"start_time": start_time, "end_time": end_time, "key_strokes": len(self.keyboard_activity_buffer)})
                     self.keyboard_activity_buffer.clear()
-            time.sleep(1)
+            time.sleep(0.5)
 
     def on_press(self, key):
         if not self.monitoring_active.is_set():
@@ -122,7 +122,7 @@ class ActivityMonitor:
 
     def ask_focus_level(self):
         while True:
-            time.sleep(60 * 30)
+            time.sleep(30 * 60)  # Ask for focus level every 30 minutes
             self.focus_level_submitted = False
             root = tk.Tk()
             root.attributes('-topmost', True)
@@ -149,8 +149,8 @@ class ActivityMonitor:
         self.mouse_listener = mouse.Listener(on_click=self.on_click, on_move=self.on_move)
         self.keyboard_listener.start()
         self.mouse_listener.start()
-        # self.window_thread = Thread(target=self.log_active_window_periodically, daemon=True)
-        # self.window_thread.start()
+        self.window_thread = Thread(target=self.log_active_window_periodically, daemon=True)
+        self.window_thread.start()
         self.mouse_movement_thread = Thread(target=self.log_mouse_movement_periodically, daemon=True)
         self.mouse_movement_thread.start()
         self.keyboard_activity_thread = Thread(target=self.log_keyboard_activity, daemon=True)
