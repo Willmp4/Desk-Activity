@@ -6,3 +6,7 @@ dist/
 *.spec
 tests/__pycache__/test_send_to_lambda.cpython-311-pytest-8.0.2.pyc.7032
 build.bat
+
+eye_gaze_v31_20.h5
+adjustment_model.pkl
+shape_predictor_68_face_landmarks.dat
