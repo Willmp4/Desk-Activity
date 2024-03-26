@@ -13,7 +13,7 @@ class ActivityMonitor:
     MOUSE_MOVE_THROTTLE = 0.5
     ASK_FOCUS_LEVEL_INTERVAL = 30
     KEYBOARD_SESSION_TIMEOUT = 1
-    GAZE_MONITOR_INTERVAL = 3
+    GAZE_MONITOR_INTERVAL = 0.3
 
     def __init__(self, data_uploader):
         self.data_uploader = data_uploader
@@ -23,9 +23,10 @@ class ActivityMonitor:
         self.event_queue = queue.Queue()
         self.event_queue_lock = Lock()
         self.last_mouse_event_time = time.time()
+        self.last_event_time = None
         self.mouse_start_position = None
         self.keyboard_activity_buffer = []
-        self.last_keyboard_activity_time = None
+        self.last_keyboard_activity_time = None 
         self.window_activity_thread = None
         self.gaze_start_time = None
         self.gaze_start_position = None
@@ -35,11 +36,19 @@ class ActivityMonitor:
             shape_predictor_path='./shape_predictor_68_face_landmarks.dat',
         )
 
-
     def log_event(self, event_type, data):
-        timestamp = datetime.now().isoformat()
-        event = {"timestamp": timestamp, "type": event_type, "data": data}
+        current_time = datetime.now()
+        timestamp = current_time.isoformat()
+        event = {
+            "timestamp": timestamp, 
+            "type": event_type, 
+            "data": data, 
+            "time_delta": None  # Initialize time_delta with None
+        }
         with self.event_queue_lock:
+            if self.last_event_time is not None:
+                event['time_delta'] = (current_time - self.last_event_time).total_seconds()
+            self.last_event_time = current_time  # Update the last event time
             self.event_queue.put(event)
 
     def on_press(self, key):
@@ -155,7 +164,9 @@ class ActivityMonitor:
                 event_batch.append(event)
                 self.event_queue.task_done()
         if event_batch:
-            self.data_uploader.send_data(self.user_id, event_batch)
+            respone = self.data_uploader.send_data(self.user_id, event_batch)
+            print(f"Upload response: {respone}")
+
 
 
     def start_monitoring(self):
