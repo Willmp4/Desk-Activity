@@ -1,4 +1,5 @@
 from threading import Thread, Event, Lock
+import threading
 import queue
 import time
 from datetime import datetime
@@ -30,6 +31,7 @@ class ActivityMonitor:
         self.window_activity_thread = None
         self.gaze_start_time = None
         self.gaze_start_position = None
+        self.keyboard_session_active = False
         self.gaze_predictor = GazePredictor(
             model_path='./eye_gaze_v31_20.h5',
             adjustment_model_path='./adjustment_model.pkl',
@@ -52,28 +54,36 @@ class ActivityMonitor:
             self.event_queue.put(event)
 
     def on_press(self, key):
-        print(f"Key pressed: {key}")  # Debug: Check if key press is detected
         if not self.monitoring_active.is_set():
             return False
-        print("Monitoring is active.")  # Debug: Confirm monitoring is active
-        if not self.keyboard_activity_buffer:
-            self.keyboard_activity_buffer.append({"timestamp": datetime.now().isoformat(), "key": str(key)})
-            self.last_keyboard_activity_time = time.time()
+        current_time = time.time()
+        if not self.keyboard_activity_buffer or current_time - self.last_keyboard_activity_time > self.KEYBOARD_SESSION_TIMEOUT:
+            # If a new session or previous session has ended, log the old session if it exists
+            if self.keyboard_activity_buffer:
+                self.end_keyboard_session()
+            self.keyboard_activity_buffer = [{"timestamp": datetime.now().isoformat(), "key": str(key)}]
         else:
-            # If the last keyboard activity was within the timeout, append to the buffer
-            if time.time() - self.last_keyboard_activity_time <= self.KEYBOARD_SESSION_TIMEOUT:
-                self.keyboard_activity_buffer.append({"timestamp": datetime.now().isoformat(), "key": str(key)})
-                self.last_keyboard_activity_time = time.time()
-            else:
-                # Log the session and start a new one
-                self.log_event('keyboard_session', {
-                    'start_time': self.keyboard_activity_buffer[0]["timestamp"],
-                    'end_time': self.keyboard_activity_buffer[-1]["timestamp"],
-                    'key_strokes': len(self.keyboard_activity_buffer)
-                })
-                print(f"Keyboard session logged: {self.keyboard_activity_buffer}")  # Debug: Check session logging
-                self.keyboard_activity_buffer = [{"timestamp": datetime.now().isoformat(), "key": str(key)}]
-                self.last_keyboard_activity_time = time.time()
+            # Within the same session, append the key press
+            self.keyboard_activity_buffer.append({"timestamp": datetime.now().isoformat(), "key": str(key)})
+        self.last_keyboard_activity_time = current_time
+        self.keyboard_session_active = True
+        # Cancel existing timer if one is already set
+        if hasattr(self, 'keyboard_session_timer'):
+            self.keyboard_session_timer.cancel()
+        # Set a new timer to end the session after the timeout period
+        self.keyboard_session_timer = threading.Timer(self.KEYBOARD_SESSION_TIMEOUT, self.end_keyboard_session)
+        self.keyboard_session_timer.start()
+
+    def end_keyboard_session(self):
+        if self.keyboard_activity_buffer:
+            # Log the session
+            self.log_event('keyboard_session', {
+                'start_time': self.keyboard_activity_buffer[0]["timestamp"],
+                'end_time': self.keyboard_activity_buffer[-1]["timestamp"],
+                'key_strokes': len(self.keyboard_activity_buffer)
+            })
+            self.keyboard_activity_buffer = []  # Clear the session buffer
+        self.keyboard_session_active = False  # Indicate the session has ended
 
     def on_click(self, x, y, button, pressed):
         if not self.monitoring_active.is_set():
@@ -138,6 +148,8 @@ class ActivityMonitor:
     def ask_focus_level(self):
         while self.monitoring_active.is_set():
             time.sleep(self.ASK_FOCUS_LEVEL_INTERVAL)
+            while self.keyboard_session_active:
+                time.sleep(0.5)
             root = tk.Tk()
             root.attributes('-topmost', True)
             root.focus_force()
