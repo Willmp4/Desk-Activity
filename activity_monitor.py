@@ -6,9 +6,19 @@ import getpass
 import tkinter as tk
 from pynput import keyboard, mouse
 
+from threading import Thread, Event, Lock
+import queue
+import time
+from datetime import datetime
+import getpass
+import tkinter as tk
+from pynput import keyboard, mouse
+import pygetwindow as gw
+
 class ActivityMonitor:
-    MOUSE_MOVE_THROTTLE = 0.1
-    ASK_FOCUS_LEVEL_INTERVAL = 10
+    MOUSE_MOVE_THROTTLE = 0.5
+    ASK_FOCUS_LEVEL_INTERVAL = 30
+    KEYBOARD_SESSION_TIMEOUT = 1
 
     def __init__(self, data_uploader):
         self.data_uploader = data_uploader
@@ -18,6 +28,10 @@ class ActivityMonitor:
         self.event_queue = queue.Queue()
         self.event_queue_lock = Lock()
         self.last_mouse_event_time = time.time()
+        self.mouse_start_position = None
+        self.keyboard_activity_buffer = []
+        self.last_keyboard_activity_time = None
+        self.window_activity_thread = None
 
     def log_event(self, event_type, data):
         timestamp = datetime.now().isoformat()
@@ -26,23 +40,57 @@ class ActivityMonitor:
             self.event_queue.put(event)
 
     def on_press(self, key):
+        print(f"Key pressed: {key}")  # Debug: Check if key press is detected
         if not self.monitoring_active.is_set():
             return False
-        self.log_event('keyboard_event', {'key': str(key)})
+        print("Monitoring is active.")  # Debug: Confirm monitoring is active
+        if not self.keyboard_activity_buffer:
+            self.keyboard_activity_buffer.append({"timestamp": datetime.now().isoformat(), "key": str(key)})
+            self.last_keyboard_activity_time = time.time()
+        else:
+            # If the last keyboard activity was within the timeout, append to the buffer
+            if time.time() - self.last_keyboard_activity_time <= self.KEYBOARD_SESSION_TIMEOUT:
+                self.keyboard_activity_buffer.append({"timestamp": datetime.now().isoformat(), "key": str(key)})
+                self.last_keyboard_activity_time = time.time()
+            else:
+                # Log the session and start a new one
+                self.log_event('keyboard_session', {
+                    'start_time': self.keyboard_activity_buffer[0]["timestamp"],
+                    'end_time': self.keyboard_activity_buffer[-1]["timestamp"],
+                    'key_strokes': len(self.keyboard_activity_buffer)
+                })
+                print(f"Keyboard session logged: {self.keyboard_activity_buffer}")  # Debug: Check session logging
+                self.keyboard_activity_buffer = [{"timestamp": datetime.now().isoformat(), "key": str(key)}]
+                self.last_keyboard_activity_time = time.time()
 
     def on_click(self, x, y, button, pressed):
         if not self.monitoring_active.is_set():
             return False
         if pressed:
             self.log_event('mouse_click', {'position': (x, y), 'button': str(button)})
+            self.mouse_start_position = (x, y)
+        else:
+            if self.mouse_start_position:
+                self.log_event('mouse_movement', {'start_position': self.mouse_start_position, 'end_position': (x, y)})
+                self.mouse_start_position = None
 
     def on_move(self, x, y):
         if not self.monitoring_active.is_set():
             return False
         current_time = time.time()
         if current_time - self.last_mouse_event_time >= self.MOUSE_MOVE_THROTTLE:
-            self.log_event('mouse_move', {'position': (x, y)})
+            if not self.mouse_start_position:
+                self.mouse_start_position = (x, y)
             self.last_mouse_event_time = current_time
+
+    def log_active_window_periodically(self):
+        last_active_window_title = None
+        while self.monitoring_active.is_set():
+            active_window_title = gw.getActiveWindow().title if gw.getActiveWindow() else None
+            if active_window_title and active_window_title != last_active_window_title:
+                self.log_event("active_window", {"title": active_window_title})
+                last_active_window_title = active_window_title
+            time.sleep(2)
 
     def ask_focus_level(self):
         while self.monitoring_active.is_set():
@@ -75,6 +123,7 @@ class ActivityMonitor:
         if event_batch:
             self.data_uploader.send_data(self.user_id, event_batch)
 
+
     def start_monitoring(self):
         self.keyboard_listener = keyboard.Listener(on_press=self.on_press)
         self.mouse_listener = mouse.Listener(on_click=self.on_click, on_move=self.on_move)
@@ -84,6 +133,9 @@ class ActivityMonitor:
         
         self.focus_thread = Thread(target=self.ask_focus_level, daemon=True)
         self.focus_thread.start()
+
+        self.window_activity_thread = Thread(target=self.log_active_window_periodically, daemon=True)
+        self.window_activity_thread.start()
 
     def stop_monitoring(self):
         self.monitoring_active.clear()
