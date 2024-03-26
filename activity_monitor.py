@@ -5,15 +5,9 @@ from datetime import datetime
 import getpass
 import tkinter as tk
 from pynput import keyboard, mouse
-
-from threading import Thread, Event, Lock
-import queue
-import time
-from datetime import datetime
-import getpass
-import tkinter as tk
-from pynput import keyboard, mouse
 import pygetwindow as gw
+import cv2
+from gaze_predictor import GazePredictor
 
 class ActivityMonitor:
     MOUSE_MOVE_THROTTLE = 0.5
@@ -32,6 +26,12 @@ class ActivityMonitor:
         self.keyboard_activity_buffer = []
         self.last_keyboard_activity_time = None
         self.window_activity_thread = None
+        self.gaze_predictor = GazePredictor(
+            model_path='./eye_gaze_v31_20.h5',
+            adjustment_model_path='./adjustment_model.pkl',
+            shape_predictor_path='./shape_predictor_68_face_landmarks.dat',
+        )
+
 
     def log_event(self, event_type, data):
         timestamp = datetime.now().isoformat()
@@ -92,6 +92,28 @@ class ActivityMonitor:
                 last_active_window_title = active_window_title
             time.sleep(2)
 
+    def monitor_gaze(self):
+        cap = cv2.VideoCapture(0)
+        while self.monitoring_active.is_set():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            gaze_x, gaze_y, adjusted_x, adjusted_y = self.gaze_predictor.predict_gaze(frame)
+            if gaze_x is not None:
+                current_time = time.time()
+                self.log_event('gaze', {
+                    'raw_gaze': (gaze_x, gaze_y),
+                    'adjusted_gaze': (adjusted_x, adjusted_y),
+                    'timestamp': current_time
+                })
+                # Additional logic for drawing on canvas or updating durations can be implemented here.
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        cap.release()
+
     def ask_focus_level(self):
         while self.monitoring_active.is_set():
             time.sleep(self.ASK_FOCUS_LEVEL_INTERVAL)
@@ -136,6 +158,9 @@ class ActivityMonitor:
 
         self.window_activity_thread = Thread(target=self.log_active_window_periodically, daemon=True)
         self.window_activity_thread.start()
+
+        self.gaze_monitoring_thread = Thread(target=self.monitor_gaze, daemon=True)
+        self.gaze_monitoring_thread.start()
 
     def stop_monitoring(self):
         self.monitoring_active.clear()
