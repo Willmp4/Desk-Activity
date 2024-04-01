@@ -97,9 +97,7 @@ class GazePredictor:
             return gaze_x_scaled, gaze_y_scaled, adjusted_x, adjusted_y
         else:
             return None, None, None, None
-
-
-
+        
     def moving_average(self, new_point, queue):
         queue.append(new_point)
         return [sum(x) / len(queue) for x in zip(*queue)]
