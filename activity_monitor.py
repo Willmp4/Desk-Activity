@@ -12,7 +12,7 @@ from gaze_predictor import GazePredictor
 
 class ActivityMonitor:
     MOUSE_MOVE_THROTTLE = 0.5
-    ASK_FOCUS_LEVEL_INTERVAL = 30
+    ASK_FOCUS_LEVEL_INTERVAL = 30 * 60
     KEYBOARD_SESSION_TIMEOUT = 1
     GAZE_MONITOR_INTERVAL = 0.3
 
