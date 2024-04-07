@@ -68,16 +68,14 @@ class GazePredictor:
             combined_eye_region, _ = self.extract_eye_region(
                 frame, landmarks, left_eye_landmarks, right_eye_landmarks, nose_bridge_points, forehead_points)
 
-            if isinstance(combined_eye_region, np.ndarray):
-
+            if isinstance(combined_eye_region, np.ndarray) and combined_eye_region.size > 0:
                 # Resize to the final target size
                 combined_eye_final_resized = cv2.resize(combined_eye_region, target_size, interpolation=cv2.INTER_AREA)
-
-                # combined_eye_final_resized = cv2.cvtColor(combined_eye_final_resized, cv2.COLOR_BGR2GRAY)
                 combined_eye_final_resized = combined_eye_final_resized.astype(np.float32) / 255.0
-
                 return combined_eye_final_resized
-
+            else:
+                # Handle the case where combined_eye_region is empty or not valid
+                return None
         return None
 
     def predict_gaze(self, frame):
