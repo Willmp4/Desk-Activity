@@ -122,23 +122,14 @@ class ActivityMonitor:
                 break
 
             gaze_x, gaze_y, adjusted_x, adjusted_y = self.gaze_predictor.predict_gaze(frame)
-            if gaze_x is not None and self.gaze_start_time is None:
-                # Mark the start of a new gaze period
-                self.gaze_start_time = time.time()
+            if gaze_x is not None:
                 self.gaze_start_position = (adjusted_x, adjusted_y)
 
-            current_time = time.time()
-            if self.gaze_start_time and current_time - self.gaze_start_time >= self.GAZE_MONITOR_INTERVAL:
-                # Log the end of the gaze period
-                self.log_event('gaze_period', {
-                    'start_position': self.gaze_start_position,
-                    'end_position': (adjusted_x, adjusted_y),
-                    'start_time': self.gaze_start_time,
-                    'end_time': current_time
-                })
-                # Reset for the next period
-                self.gaze_start_time = None
-                self.gaze_start_position = None
+                log_data = {
+                    "gaze_start_position": (gaze_x, gaze_y),
+                    "adjusted_gaze_start_position": (adjusted_x, adjusted_y)
+                }
+                self.log_event("gaze_data", log_data)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
