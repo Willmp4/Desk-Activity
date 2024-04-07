@@ -10,3 +10,5 @@ build.bat
 eye_gaze_v31_20.h5
 adjustment_model.pkl
 shape_predictor_68_face_landmarks.dat
+
+/focus_level/*
