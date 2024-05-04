@@ -12,3 +12,4 @@ adjustment_model.pkl
 shape_predictor_68_face_landmarks.dat
 
 /focus_level/*
+*.json
